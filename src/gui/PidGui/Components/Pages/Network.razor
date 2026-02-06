@@ -6,8 +6,11 @@
 
 @{
     var filtered = FilteredConnections().ToList();
-    var display = _pageSize <= 0 ? filtered : filtered.Take(_pageSize).ToList();
+    var summaries = BuildProcessSummaries(filtered);
+    var tree = BuildProcessTree(summaries, _collapsed);
+    var display = _pageSize <= 0 ? tree : tree.Take(_pageSize).ToList();
     var topProcesses = GetTopProcesses(filtered);
+    var summaryCount = summaries.Count;
     var total = _connections.Count;
     var established = _connections.Count(c => string.Equals(c.State, "ESTABLISHED", StringComparison.OrdinalIgnoreCase));
     var listening = _connections.Count(c => string.Equals(c.State, "LISTENING", StringComparison.OrdinalIgnoreCase));
@@ -148,16 +151,17 @@
                                 </div>
                             </div>
                             <div class="card-body">
-                                <svg class="sparkline sparkline-wide" viewBox="0 0 100 60" preserveAspectRatio="none">
-                                    <line class="sparkline-grid" x1="6" y1="6" x2="98" y2="6" />
-                                    <line class="sparkline-grid" x1="6" y1="30" x2="98" y2="30" />
-                                    <line class="sparkline-grid" x1="6" y1="54" x2="98" y2="54" />
-                                    <line class="sparkline-axis" x1="6" y1="6" x2="6" y2="54" />
-                                    <line class="sparkline-axis" x1="6" y1="54" x2="98" y2="54" />
-                                    <text class="axis-label" x="0" y="8">@maxValue</text>
-                                    <text class="axis-label" x="0" y="32">@midValue</text>
-                                    <text class="axis-label" x="0" y="56">0</text>
-                                    <text class="axis-caption" x="52" y="58">time -&gt;</text>
+                                <svg class="sparkline sparkline-wide" viewBox="0 0 100 20" preserveAspectRatio="none">
+                                    <line class="sparkline-grid" x1="6" y1="2" x2="98" y2="2" />
+                                    <line class="sparkline-grid" x1="6" y1="10" x2="98" y2="10" />
+                                    <line class="sparkline-grid" x1="6" y1="18" x2="98" y2="18" />
+                                    <line class="sparkline-axis" x1="6" y1="2" x2="6" y2="18" />
+                                    <line class="sparkline-axis" x1="6" y1="18" x2="98" y2="18" />
+                                    <text class="axis-label" x="0" y="4">@maxValue</text>
+                                    <text class="axis-label" x="0" y="12">@midValue</text>
+                                    <text class="axis-label" x="0" y="18.5">0</text>
+                                    <text class="axis-caption axis-caption-y" x="8" y="5">connections</text>
+                                    <text class="axis-caption axis-caption-x" x="52" y="18.5">time</text>
                                     <polyline points="@BuildPolyline(_samples.Select(s => s.Total), maxValue)" class="sparkline-line sparkline-total" />
                                     <polyline points="@BuildPolyline(_samples.Select(s => s.Established), maxValue)" class="sparkline-line sparkline-established" />
                                     <polyline points="@BuildPolyline(_samples.Select(s => s.Listening), maxValue)" class="sparkline-line sparkline-listening" />
@@ -277,9 +281,9 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header">
-                                <h3 class="card-title">All Connections</h3>
+                                <h3 class="card-title">Connections by Process</h3>
                                 <div class="card-actions">
-                                    <span class="text-muted">@display.Count of @filtered.Count</span>
+                                    <span class="text-muted">@display.Count of @summaryCount</span>
                                 </div>
                             </div>
                             <div class="table-responsive">
@@ -287,10 +291,10 @@
                                     <thead>
                                         <tr>
                                             <th>Process</th>
-                                            <th>Protocol</th>
-                                            <th>Local</th>
-                                            <th>Remote</th>
-                                            <th>State</th>
+                                            <th>Total</th>
+                                            <th>Established</th>
+                                            <th>Listening</th>
+                                            <th></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -300,7 +304,7 @@
                                                 <td colspan="5">
                                                     <div class="empty">
                                                         <div class="empty-icon">o</div>
-                                                        <div class="empty-title">No connections</div>
+                                                        <div class="empty-title">No processes found</div>
                                                         <div class="empty-subtitle">Adjust filters or refresh to see data.</div>
                                                     </div>
                                                 </td>
@@ -308,32 +312,101 @@
                                         }
                                         else
                                         {
-                                            @foreach (var conn in display)
+                                            @foreach (var node in display)
                                             {
+                                                var summary = node.Summary;
+                                                var isCollapsed = _collapsed.Contains(summary.Pid);
+                                                var totalValue = isCollapsed ? node.SubtreeTotal : summary.Total;
+                                                var establishedValue = isCollapsed ? node.SubtreeEstablished : summary.Established;
+                                                var listeningValue = isCollapsed ? node.SubtreeListening : summary.Listening;
                                                 <tr>
                                                     <td>
-                                                        <div class="d-flex align-items-center">
-                                                            <span class="status-dot @StateDot(conn)"></span>
+                                                        <div class="d-flex align-items-center tree-indent" style="--depth: @node.Depth; --tree-line-opacity: @(node.Depth == 0 ? 0 : 1)">
+                                                            <button class="tree-toggle" disabled="@(!node.HasChildren)" @onclick="() => ToggleCollapsed(summary.Pid)">
+                                                                @if (node.HasChildren)
+                                                                {
+                                                                    <span>@(isCollapsed ? "+" : "-")</span>
+                                                                }
+                                                            </button>
+                                                            <span class="status-dot @ConnectionDotClass(totalValue, establishedValue, listeningValue)"></span>
                                                             <div class="flex-fill">
-                                                                <div class="font-weight-medium">@GetProcessLabel(conn)</div>
-                                                                <div class="text-muted small">PID @conn.Pid</div>
+                                                                <div class="font-weight-medium">@summary.Name</div>
+                                                                <div class="text-muted small">PID @summary.Pid</div>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td>@conn.Protocol</td>
-                                                    <td class="text-muted"><small>@FormatEndpoint(conn.LocalAddress, conn.LocalPort)</small></td>
-                                                    <td class="text-muted"><small>@FormatEndpoint(conn.RemoteAddress, conn.RemotePort)</small></td>
-                                                    <td><span class="badge badge-secondary">@GetStateLabel(conn)</span></td>
+                                                    <td><span class="badge badge-primary">@totalValue</span></td>
+                                                    <td><span class="badge badge-success">@establishedValue</span></td>
+                                                    <td><span class="badge badge-warning">@listeningValue</span></td>
+                                                    <td>
+                                                        <button class="btn btn-sm btn-icon" title="Toggle details" @onclick="() => ToggleExpanded(summary.Pid)">
+                                                            @if (_expanded.Contains(summary.Pid))
+                                                            {
+                                                                <span>-</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span>+</span>
+                                                            }
+                                                        </button>
+                                                    </td>
                                                 </tr>
+                                                @if (_expanded.Contains(summary.Pid))
+                                                {
+                                                    <tr class="detail-row">
+                                                        <td colspan="5">
+                                                            <div class="detail-block">
+                                                                <div class="detail-title">Connections</div>
+                                                                @if (summary.Connections.Count == 0)
+                                                                {
+                                                                    <div class="empty">
+                                                                        <div class="empty-icon">o</div>
+                                                                        <div class="empty-title">No connections</div>
+                                                                        <div class="empty-subtitle">This process has no active sockets.</div>
+                                                                    </div>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <div class="table-responsive">
+                                                                        <table class="table table-vcenter connection-table">
+                                                                            <thead>
+                                                                                <tr>
+                                                                                    <th>Protocol</th>
+                                                                                    <th>Local</th>
+                                                                                    <th>Remote</th>
+                                                                                    <th>State</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                @foreach (var conn in summary.Connections)
+                                                                                {
+                                                                                    <tr>
+                                                                                        <td>@conn.Protocol</td>
+                                                                                        <td class="text-muted"><small>@FormatEndpoint(conn.LocalAddress, conn.LocalPort)</small></td>
+                                                                                        <td class="text-muted"><small>@FormatEndpoint(conn.RemoteAddress, conn.RemotePort)</small></td>
+                                                                                        <td>
+                                                                                            <span class="status-dot @StateDot(conn)"></span>
+                                                                                            <span class="ms-2">@GetStateLabel(conn)</span>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                }
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
                                             }
                                         }
                                     </tbody>
                                 </table>
                             </div>
-                            @if (_pageSize > 0 && filtered.Count > _pageSize)
+                            @if (_pageSize > 0 && summaryCount > _pageSize)
                             {
                                 <div class="card-footer">
-                                    <span class="text-muted">Showing @_pageSize of @filtered.Count connections</span>
+                                    <span class="text-muted">Showing @_pageSize of @summaryCount processes</span>
                                 </div>
                             }
                         </div>
@@ -346,6 +419,23 @@
 
 @code {
     private sealed record NetworkSample(DateTime TimestampUtc, int Total, int Established, int Listening);
+    private sealed record ProcessSummary(
+        int Pid,
+        string Name,
+        int? ParentId,
+        int Total,
+        int Established,
+        int Listening,
+        int Udp,
+        IReadOnlyList<NetworkConnectionInfo> Connections);
+    private sealed record ProcessNode(
+        ProcessSummary Summary,
+        int Depth,
+        bool HasChildren,
+        int SubtreeTotal,
+        int SubtreeEstablished,
+        int SubtreeListening,
+        int SubtreeUdp);
 
     private readonly List<NetworkConnectionInfo> _connections = new();
     private readonly List<NetworkSample> _samples = new();
@@ -359,6 +449,9 @@
     private DateTime? _lastUpdated;
     private CancellationTokenSource? _refreshCts;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private readonly HashSet<int> _collapsed = new();
+    private readonly HashSet<int> _expanded = new();
+    private bool _collapseInitialized;
 
     protected override async Task OnInitializedAsync()
     {
@@ -380,6 +473,19 @@
             _connections.Clear();
             _connections.AddRange(snapshot);
             _lastUpdated = DateTime.UtcNow;
+            var alive = _connections.Select(c => c.Pid).ToHashSet();
+            _expanded.RemoveWhere(id => !alive.Contains(id));
+            _collapsed.RemoveWhere(id => !alive.Contains(id));
+            if (!_collapseInitialized)
+            {
+                var parents = _connections
+                    .Select(c => c.ParentId)
+                    .Where(pid => pid.HasValue && alive.Contains(pid.Value))
+                    .Select(pid => pid!.Value)
+                    .ToHashSet();
+                _collapsed.UnionWith(parents);
+                _collapseInitialized = true;
+            }
             UpdateSamples();
         }
         finally
@@ -481,6 +587,191 @@
         return filtered.OrderBy(c => c.ProcessName).ThenBy(c => c.Pid);
     }
 
+    private static List<ProcessSummary> BuildProcessSummaries(IEnumerable<NetworkConnectionInfo> connections)
+    {
+        var summaries = new List<ProcessSummary>();
+        foreach (var group in connections.GroupBy(conn => conn.Pid))
+        {
+            var list = group.ToList();
+            var sample = list[0];
+            var established = list.Count(conn => string.Equals(conn.State, "ESTABLISHED", StringComparison.OrdinalIgnoreCase));
+            var listening = list.Count(conn => string.Equals(conn.State, "LISTENING", StringComparison.OrdinalIgnoreCase));
+            var udp = list.Count(conn => string.Equals(conn.Protocol, "UDP", StringComparison.OrdinalIgnoreCase));
+
+            summaries.Add(new ProcessSummary(
+                group.Key,
+                GetProcessLabel(sample),
+                sample.ParentId,
+                list.Count,
+                established,
+                listening,
+                udp,
+                list));
+        }
+
+        return summaries
+            .OrderByDescending(summary => summary.Total)
+            .ThenBy(summary => summary.Name)
+            .ToList();
+    }
+
+    private static List<ProcessNode> BuildProcessTree(IReadOnlyList<ProcessSummary> summaries, HashSet<int> collapsed)
+    {
+        var result = new List<ProcessNode>();
+        if (summaries.Count == 0)
+        {
+            return result;
+        }
+
+        var index = summaries.Select((summary, idx) => (summary.Pid, idx))
+            .ToDictionary(item => item.Pid, item => item.idx);
+
+        var byId = summaries.ToDictionary(summary => summary.Pid);
+        var children = new Dictionary<int, List<ProcessSummary>>();
+        var roots = new List<ProcessSummary>();
+
+        foreach (var summary in summaries)
+        {
+            if (summary.ParentId is int parentId && byId.ContainsKey(parentId))
+            {
+                if (!children.TryGetValue(parentId, out var list))
+                {
+                    list = new List<ProcessSummary>();
+                    children[parentId] = list;
+                }
+
+                list.Add(summary);
+            }
+            else
+            {
+                roots.Add(summary);
+            }
+        }
+
+        roots.Sort((a, b) => index[a.Pid].CompareTo(index[b.Pid]));
+        foreach (var list in children.Values)
+        {
+            list.Sort((a, b) => index[a.Pid].CompareTo(index[b.Pid]));
+        }
+
+        var subtreeTotal = new Dictionary<int, int>();
+        var subtreeEstablished = new Dictionary<int, int>();
+        var subtreeListening = new Dictionary<int, int>();
+        var subtreeUdp = new Dictionary<int, int>();
+
+        int ComputeTotal(ProcessSummary summary)
+        {
+            var total = summary.Total;
+            if (children.TryGetValue(summary.Pid, out var list))
+            {
+                foreach (var child in list)
+                {
+                    total += ComputeTotal(child);
+                }
+            }
+
+            subtreeTotal[summary.Pid] = total;
+            return total;
+        }
+
+        int ComputeEstablished(ProcessSummary summary)
+        {
+            var total = summary.Established;
+            if (children.TryGetValue(summary.Pid, out var list))
+            {
+                foreach (var child in list)
+                {
+                    total += ComputeEstablished(child);
+                }
+            }
+
+            subtreeEstablished[summary.Pid] = total;
+            return total;
+        }
+
+        int ComputeListening(ProcessSummary summary)
+        {
+            var total = summary.Listening;
+            if (children.TryGetValue(summary.Pid, out var list))
+            {
+                foreach (var child in list)
+                {
+                    total += ComputeListening(child);
+                }
+            }
+
+            subtreeListening[summary.Pid] = total;
+            return total;
+        }
+
+        int ComputeUdp(ProcessSummary summary)
+        {
+            var total = summary.Udp;
+            if (children.TryGetValue(summary.Pid, out var list))
+            {
+                foreach (var child in list)
+                {
+                    total += ComputeUdp(child);
+                }
+            }
+
+            subtreeUdp[summary.Pid] = total;
+            return total;
+        }
+
+        foreach (var root in roots)
+        {
+            ComputeTotal(root);
+            ComputeEstablished(root);
+            ComputeListening(root);
+            ComputeUdp(root);
+        }
+
+        void Walk(ProcessSummary summary, int depth)
+        {
+            var hasChildren = children.TryGetValue(summary.Pid, out var list) && list.Count > 0;
+            result.Add(new ProcessNode(
+                summary,
+                depth,
+                hasChildren,
+                subtreeTotal.TryGetValue(summary.Pid, out var total) ? total : summary.Total,
+                subtreeEstablished.TryGetValue(summary.Pid, out var established) ? established : summary.Established,
+                subtreeListening.TryGetValue(summary.Pid, out var listening) ? listening : summary.Listening,
+                subtreeUdp.TryGetValue(summary.Pid, out var udp) ? udp : summary.Udp));
+
+            if (hasChildren && !collapsed.Contains(summary.Pid))
+            {
+                foreach (var child in list!)
+                {
+                    Walk(child, depth + 1);
+                }
+            }
+        }
+
+        foreach (var root in roots)
+        {
+            Walk(root, 0);
+        }
+
+        return result;
+    }
+
+    private void ToggleCollapsed(int pid)
+    {
+        if (!_collapsed.Add(pid))
+        {
+            _collapsed.Remove(pid);
+        }
+    }
+
+    private void ToggleExpanded(int pid)
+    {
+        if (!_expanded.Add(pid))
+        {
+            _expanded.Remove(pid);
+        }
+    }
+
     private static bool IsLoopback(string address)
     {
         return address == "127.0.0.1" || address == "::1" || address.StartsWith("127.", StringComparison.Ordinal);
@@ -540,6 +831,21 @@
         return "status-dot-red";
     }
 
+    private static string ConnectionDotClass(int total, int established, int listening)
+    {
+        if (established > 0)
+        {
+            return "status-dot-green";
+        }
+
+        if (listening > 0)
+        {
+            return "status-dot-yellow";
+        }
+
+        return total > 0 ? "status-dot-red" : "status-dot-green";
+    }
+
     private static IReadOnlyList<(string Name, int Count)> GetTopProcesses(IEnumerable<NetworkConnectionInfo> connections)
     {
         return connections
@@ -561,8 +867,8 @@
         var max = Math.Max(1, maxValue);
         const double plotLeft = 6;
         const double plotRight = 98;
-        const double plotTop = 6;
-        const double plotBottom = 54;
+        const double plotTop = 2;
+        const double plotBottom = 18;
         var width = plotRight - plotLeft;
         var height = plotBottom - plotTop;
         var step = list.Count == 1 ? 0 : width / (list.Count - 1);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Management;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using PidGui.Models;
@@ -15,6 +16,7 @@ namespace PidGui.Services
         public async Task<IReadOnlyList<NetworkConnectionInfo>> GetConnectionsAsync()
         {
             var processMap = BuildProcessMap();
+            var parentMap = GetParentMap();
             var results = new List<NetworkConnectionInfo>();
 
             using var process = new Process
@@ -97,6 +99,11 @@ namespace PidGui.Services
                 ParseEndpoint(remote, out var remoteAddress, out var remotePort);
 
                 processMap.TryGetValue(pid, out var name);
+                int? parentId = null;
+                if (parentMap.TryGetValue(pid, out var parent) && parent > 0)
+                {
+                    parentId = parent;
+                }
 
                 results.Add(new NetworkConnectionInfo(
                     proto,
@@ -106,7 +113,8 @@ namespace PidGui.Services
                     remotePort,
                     state,
                     pid,
-                    name));
+                    name,
+                    parentId));
             }
 
             return results;
@@ -132,6 +140,50 @@ namespace PidGui.Services
             }
 
             return map;
+        }
+
+        private static IReadOnlyDictionary<int, int> GetParentMap()
+        {
+            var map = new Dictionary<int, int>();
+            try
+            {
+                using var searcher = new ManagementObjectSearcher(
+                    "SELECT ProcessId, ParentProcessId FROM Win32_Process");
+                foreach (ManagementObject obj in searcher.Get())
+                {
+                    var pid = ToInt(obj["ProcessId"]);
+                    if (pid == 0)
+                    {
+                        continue;
+                    }
+
+                    var parentPid = ToInt(obj["ParentProcessId"]);
+                    map[pid] = parentPid;
+                }
+            }
+            catch
+            {
+                // WMI may be unavailable or restricted.
+            }
+
+            return map;
+        }
+
+        private static int ToInt(object? value)
+        {
+            if (value is null)
+            {
+                return 0;
+            }
+
+            try
+            {
+                return Convert.ToInt32(value);
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         private static void ParseEndpoint(string endpoint, out string address, out int port)

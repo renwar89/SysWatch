@@ -10,5 +10,6 @@ namespace PidGui.Models
         int RemotePort,
         string? State,
         int Pid,
-        string? ProcessName);
+        string? ProcessName,
+        int? ParentId);
 }

@@ -821,6 +821,7 @@ svg {
     font-size: 0.82rem;
 }
 
+
 .detail-warnings ul {
     margin: 0.4rem 0 0;
     padding-left: 1.2rem;
@@ -894,7 +895,9 @@ svg {
 }
 
 .sparkline-wide {
-    height: 220px;
+    height: auto;
+    min-height: 160px;
+    aspect-ratio: 5 / 1;
 }
 
 .sparkline-axis {
@@ -910,14 +913,24 @@ svg {
 
 .axis-label {
     fill: var(--tblr-secondary);
-    font-size: 4px;
-    font-family: var(--tblr-font-mono);
+    font-size: 3.6px;
+    font-family: var(--tblr-font-sans-serif);
+    font-weight: 600;
 }
 
 .axis-caption {
     fill: var(--tblr-secondary);
-    font-size: 4px;
+    font-size: 3.6px;
+    font-family: var(--tblr-font-sans-serif);
+    font-weight: 600;
+}
+
+.axis-caption-x {
     text-anchor: middle;
+}
+
+.axis-caption-y {
+    text-anchor: start;
 }
 
 .sparkline-line {
@@ -964,6 +977,24 @@ svg {
 
 .legend-listening {
     background: var(--tblr-warning);
+}
+
+.badge-primary,
+.badge-secondary,
+.badge-success,
+.badge-warning,
+.badge-danger,
+.badge-info {
+    color: #0b1220;
+}
+
+.connection-table th {
+    font-size: 0.72rem;
+    color: var(--tblr-secondary);
+}
+
+.connection-table td {
+    font-size: 0.78rem;
 }
 
 .metric-row {

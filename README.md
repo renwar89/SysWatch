@@ -39,25 +39,6 @@ powershell -NoProfile -NonInteractive -File scripts\run.ps1
 
 If MSBuild is installed, the scripts will use it automatically. WinUI 3 builds require the Windows SDK PRI tooling (included with Visual Studio or Build Tools).
 
-## Release (v1.0.0)
-Version numbers live in `src/gui/PidGui/PidGui.csproj`:
-- `Version` / `AssemblyVersion` / `FileVersion`
-
-Build a release binary:
-
-```powershell
-powershell -NoProfile -NonInteractive -File scripts\build.ps1 -Configuration Release -Platform x64 -Runtime win-x64
-```
-
-Optional publish (uses the existing publish profiles):
-
-```powershell
-# x64 publish profile
-"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" `
-  .\src\gui\PidGui\PidGui.csproj /restore /t:Publish /p:Configuration=Release /p:Platform=x64 `
-  /p:RuntimeIdentifier=win-x64 /p:WindowsAppSDKSelfContained=true /p:PublishProfile=win10-x64
-```
-
 ## Notes
 - The Network page uses `netstat -ano` to enumerate connections. Some processes may require elevated privileges to resolve fully.
 - If the UI fails to render styles after a rebuild, fully close/reopen the app to refresh the WebView cache.

@@ -284,25 +284,13 @@
                                                                 </div>
                                                             </div>
                                                             <span class="ms-2">@cpuValue.ToString("F1")%</span>
-                                                            @if (isCollapsed && node.HasChildren)
-                                                            {
-                                                                <span class="aggregate-tag">sum</span>
-                                                            }
                                                         </div>
                                                     </td>
                                                     <td>
                                                         <span>@FormatBytes(memValue)</span>
-                                                        @if (isCollapsed && node.HasChildren)
-                                                        {
-                                                            <span class="aggregate-tag">sum</span>
-                                                        }
                                                     </td>
                                                     <td>
                                                         <span class="badge badge-secondary">@threadValue</span>
-                                                        @if (isCollapsed && node.HasChildren)
-                                                        {
-                                                            <span class="aggregate-tag">sum</span>
-                                                        }
                                                     </td>
                                                     <td>@FormatRelative(proc.StartTimeUtc)</td>
                                                     <td class="text-muted"><small>@TruncatePath(proc.Path)</small></td>
@@ -324,7 +312,7 @@
                                                     <tr class="detail-row">
                                                         <td colspan="7">
                                                             <div class="detail-block">
-                                                                <div class="detail-title">witr --pid @proc.Id</div>
+                                                                <div class="detail-title">Process details (PID @proc.Id)</div>
                                                                 <div class="detail-grid">
                                                                     <div class="detail-line"><span class="detail-label">Target</span><span>@GetExeName(proc)</span></div>
                                                                     <div class="detail-line"><span class="detail-label">Process</span><span>@GetExeName(proc) (pid @proc.Id)</span></div>
@@ -385,6 +373,7 @@
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly HashSet<int> _expanded = new();
     private readonly HashSet<int> _collapsed = new();
+    private bool _collapseInitialized;
 
     private sealed record ProcessNode(
         ProcessInfo Process,
@@ -417,6 +406,16 @@
             var alive = _processes.Select(p => p.Id).ToHashSet();
             _expanded.RemoveWhere(id => !alive.Contains(id));
             _collapsed.RemoveWhere(id => !alive.Contains(id));
+            if (!_collapseInitialized)
+            {
+                var parents = _processes
+                    .Select(proc => proc.ParentId)
+                    .Where(pid => pid.HasValue && alive.Contains(pid.Value))
+                    .Select(pid => pid!.Value)
+                    .ToHashSet();
+                _collapsed.UnionWith(parents);
+                _collapseInitialized = true;
+            }
         }
         finally
         {
