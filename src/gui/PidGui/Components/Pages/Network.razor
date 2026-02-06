@@ -11,6 +11,8 @@
     var total = _connections.Count;
     var established = _connections.Count(c => string.Equals(c.State, "ESTABLISHED", StringComparison.OrdinalIgnoreCase));
     var listening = _connections.Count(c => string.Equals(c.State, "LISTENING", StringComparison.OrdinalIgnoreCase));
+    var maxValue = Math.Max(1, _samples.Select(s => s.Total).DefaultIfEmpty(0).Max());
+    var midValue = (int)Math.Round(maxValue / 2.0);
     var uniqueRemotes = _connections.Select(c => c.RemoteAddress)
         .Where(addr => !string.IsNullOrWhiteSpace(addr) && addr != "*" && addr != "0.0.0.0" && addr != "::")
         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -147,9 +149,18 @@
                             </div>
                             <div class="card-body">
                                 <svg class="sparkline sparkline-wide" viewBox="0 0 100 60" preserveAspectRatio="none">
-                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Total))" class="sparkline-line sparkline-total" />
-                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Established))" class="sparkline-line sparkline-established" />
-                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Listening))" class="sparkline-line sparkline-listening" />
+                                    <line class="sparkline-grid" x1="6" y1="6" x2="98" y2="6" />
+                                    <line class="sparkline-grid" x1="6" y1="30" x2="98" y2="30" />
+                                    <line class="sparkline-grid" x1="6" y1="54" x2="98" y2="54" />
+                                    <line class="sparkline-axis" x1="6" y1="6" x2="6" y2="54" />
+                                    <line class="sparkline-axis" x1="6" y1="54" x2="98" y2="54" />
+                                    <text class="axis-label" x="0" y="8">@maxValue</text>
+                                    <text class="axis-label" x="0" y="32">@midValue</text>
+                                    <text class="axis-label" x="0" y="56">0</text>
+                                    <text class="axis-caption" x="52" y="58">time -&gt;</text>
+                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Total), maxValue)" class="sparkline-line sparkline-total" />
+                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Established), maxValue)" class="sparkline-line sparkline-established" />
+                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Listening), maxValue)" class="sparkline-line sparkline-listening" />
                                 </svg>
                                 <div class="legend">
                                     <span><i class="legend-dot legend-total"></i>Total</span>
@@ -539,7 +550,7 @@
             .ToList();
     }
 
-    private static string BuildPolyline(IEnumerable<int> values)
+    private static string BuildPolyline(IEnumerable<int> values, int maxValue)
     {
         var list = values.ToList();
         if (list.Count == 0)
@@ -547,15 +558,19 @@
             return string.Empty;
         }
 
-        var max = Math.Max(1, list.Max());
-        var width = 100.0;
-        var height = 40.0;
+        var max = Math.Max(1, maxValue);
+        const double plotLeft = 6;
+        const double plotRight = 98;
+        const double plotTop = 6;
+        const double plotBottom = 54;
+        var width = plotRight - plotLeft;
+        var height = plotBottom - plotTop;
         var step = list.Count == 1 ? 0 : width / (list.Count - 1);
 
         return string.Join(" ", list.Select((value, index) =>
         {
-            var x = step * index;
-            var y = height - (value / (double)max * height);
+            var x = plotLeft + (step * index);
+            var y = plotBottom - (value / (double)max * height);
             return $"{x:0.#},{y:0.#}";
         }));
     }

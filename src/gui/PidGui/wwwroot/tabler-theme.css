@@ -831,6 +831,26 @@ svg {
     position: relative;
 }
 
+.tree-toggle {
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 0.45rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.6);
+    color: var(--tblr-dark);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    margin-right: 0.45rem;
+    cursor: pointer;
+}
+
+.tree-toggle:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
 .tree-indent::before {
     content: "";
     position: absolute;
@@ -856,6 +876,17 @@ svg {
     word-break: break-word;
 }
 
+.aggregate-tag {
+    margin-left: 0.45rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--tblr-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
 .sparkline {
     width: 100%;
     height: 180px;
@@ -864,6 +895,29 @@ svg {
 
 .sparkline-wide {
     height: 220px;
+}
+
+.sparkline-axis {
+    stroke: rgba(148, 163, 184, 0.4);
+    stroke-width: 0.6;
+}
+
+.sparkline-grid {
+    stroke: rgba(148, 163, 184, 0.2);
+    stroke-width: 0.4;
+    stroke-dasharray: 2 2;
+}
+
+.axis-label {
+    fill: var(--tblr-secondary);
+    font-size: 4px;
+    font-family: var(--tblr-font-mono);
+}
+
+.axis-caption {
+    fill: var(--tblr-secondary);
+    font-size: 4px;
+    text-anchor: middle;
 }
 
 .sparkline-line {

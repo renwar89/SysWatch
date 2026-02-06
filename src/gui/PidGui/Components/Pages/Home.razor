@@ -6,7 +6,7 @@
 
 @{
     var filtered = FilteredProcesses().ToList();
-    var tree = BuildProcessTree(filtered);
+    var tree = BuildProcessTree(filtered, _collapsed);
     var display = _pageSize <= 0 ? tree : tree.Take(_pageSize).ToList();
 }
 
@@ -250,9 +250,19 @@
                                             @foreach (var node in display)
                                             {
                                                 var proc = node.Process;
+                                                var isCollapsed = _collapsed.Contains(proc.Id);
+                                                var cpuValue = isCollapsed ? node.SubtreeCpu : proc.CpuPercent;
+                                                var memValue = isCollapsed ? node.SubtreeMemory : proc.WorkingSetBytes;
+                                                var threadValue = isCollapsed ? node.SubtreeThreads : proc.ThreadCount;
                                                 <tr class="@(_expanded.Contains(proc.Id) ? "row-expanded" : string.Empty)">
                                                     <td>
                                                         <div class="d-flex align-items-center tree-indent" style="--depth: @node.Depth; --tree-line-opacity: @(node.Depth == 0 ? 0 : 1)">
+                                                            <button class="tree-toggle" disabled="@(!node.HasChildren)" @onclick="() => ToggleCollapsed(proc.Id)">
+                                                                @if (node.HasChildren)
+                                                                {
+                                                                    <span>@(isCollapsed ? "+" : "-")</span>
+                                                                }
+                                                            </button>
                                                             <span class="status-dot @GetStatusDotClass(proc)"></span>
                                                             <div class="flex-fill">
                                                                 <div class="font-weight-medium">@proc.Name</div>
@@ -268,16 +278,32 @@
                                                         <div class="d-flex align-items-center">
                                                             <div class="flex-fill">
                                                                 <div class="progress progress-sm">
-                                                                    <div class="progress-bar @GetCpuProgressClass(proc.CpuPercent)"
-                                                                         style="width: @ClampPercent(proc.CpuPercent)%"
+                                                                    <div class="progress-bar @GetCpuProgressClass(cpuValue)"
+                                                                         style="width: @ClampPercent(cpuValue)%"
                                                                          role="progressbar"></div>
                                                                 </div>
                                                             </div>
-                                                            <span class="ms-2">@proc.CpuPercent.ToString("F1")%</span>
+                                                            <span class="ms-2">@cpuValue.ToString("F1")%</span>
+                                                            @if (isCollapsed && node.HasChildren)
+                                                            {
+                                                                <span class="aggregate-tag">sum</span>
+                                                            }
                                                         </div>
                                                     </td>
-                                                    <td>@FormatBytes(proc.WorkingSetBytes)</td>
-                                                    <td><span class="badge badge-secondary">@proc.ThreadCount</span></td>
+                                                    <td>
+                                                        <span>@FormatBytes(memValue)</span>
+                                                        @if (isCollapsed && node.HasChildren)
+                                                        {
+                                                            <span class="aggregate-tag">sum</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge badge-secondary">@threadValue</span>
+                                                        @if (isCollapsed && node.HasChildren)
+                                                        {
+                                                            <span class="aggregate-tag">sum</span>
+                                                        }
+                                                    </td>
                                                     <td>@FormatRelative(proc.StartTimeUtc)</td>
                                                     <td class="text-muted"><small>@TruncatePath(proc.Path)</small></td>
                                                     <td>
@@ -358,8 +384,15 @@
     private CancellationTokenSource? _refreshCts;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly HashSet<int> _expanded = new();
+    private readonly HashSet<int> _collapsed = new();
 
-    private sealed record ProcessNode(ProcessInfo Process, int Depth);
+    private sealed record ProcessNode(
+        ProcessInfo Process,
+        int Depth,
+        bool HasChildren,
+        double SubtreeCpu,
+        long SubtreeMemory,
+        int SubtreeThreads);
 
     protected override async Task OnInitializedAsync()
     {
@@ -383,6 +416,7 @@
             _lastUpdated = DateTime.UtcNow;
             var alive = _processes.Select(p => p.Id).ToHashSet();
             _expanded.RemoveWhere(id => !alive.Contains(id));
+            _collapsed.RemoveWhere(id => !alive.Contains(id));
         }
         finally
         {
@@ -490,7 +524,7 @@
         return filtered;
     }
 
-    private static List<ProcessNode> BuildProcessTree(IReadOnlyList<ProcessInfo> ordered)
+    private static List<ProcessNode> BuildProcessTree(IReadOnlyList<ProcessInfo> ordered, HashSet<int> collapsed)
     {
         var result = new List<ProcessNode>();
         if (ordered.Count == 0)
@@ -529,12 +563,76 @@
             list.Sort((a, b) => index[a.Id].CompareTo(index[b.Id]));
         }
 
-        void Walk(ProcessInfo proc, int depth)
+        var subtreeCpu = new Dictionary<int, double>();
+        var subtreeMem = new Dictionary<int, long>();
+        var subtreeThreads = new Dictionary<int, int>();
+
+        double ComputeCpu(ProcessInfo proc)
         {
-            result.Add(new ProcessNode(proc, depth));
+            var total = proc.CpuPercent;
             if (children.TryGetValue(proc.Id, out var list))
             {
                 foreach (var child in list)
+                {
+                    total += ComputeCpu(child);
+                }
+            }
+
+            subtreeCpu[proc.Id] = total;
+            return total;
+        }
+
+        long ComputeMem(ProcessInfo proc)
+        {
+            var total = proc.WorkingSetBytes;
+            if (children.TryGetValue(proc.Id, out var list))
+            {
+                foreach (var child in list)
+                {
+                    total += ComputeMem(child);
+                }
+            }
+
+            subtreeMem[proc.Id] = total;
+            return total;
+        }
+
+        int ComputeThreads(ProcessInfo proc)
+        {
+            var total = proc.ThreadCount;
+            if (children.TryGetValue(proc.Id, out var list))
+            {
+                foreach (var child in list)
+                {
+                    total += ComputeThreads(child);
+                }
+            }
+
+            subtreeThreads[proc.Id] = total;
+            return total;
+        }
+
+        foreach (var root in roots)
+        {
+            ComputeCpu(root);
+            ComputeMem(root);
+            ComputeThreads(root);
+        }
+
+        void Walk(ProcessInfo proc, int depth)
+        {
+            var hasChildren = children.TryGetValue(proc.Id, out var list) && list.Count > 0;
+            result.Add(new ProcessNode(
+                proc,
+                depth,
+                hasChildren,
+                subtreeCpu.TryGetValue(proc.Id, out var cpu) ? cpu : proc.CpuPercent,
+                subtreeMem.TryGetValue(proc.Id, out var mem) ? mem : proc.WorkingSetBytes,
+                subtreeThreads.TryGetValue(proc.Id, out var threads) ? threads : proc.ThreadCount));
+
+            if (hasChildren && !collapsed.Contains(proc.Id))
+            {
+                foreach (var child in list!)
                 {
                     Walk(child, depth + 1);
                 }
@@ -547,6 +645,14 @@
         }
 
         return result;
+    }
+
+    private void ToggleCollapsed(int pid)
+    {
+        if (!_collapsed.Add(pid))
+        {
+            _collapsed.Remove(pid);
+        }
     }
 
     private double GetAverageCpu()
