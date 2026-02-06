@@ -1,13 +1,13 @@
-# SysWatch
+﻿# SysWatch
 
-SysWatch is a WinUI 3 desktop dashboard for real‑time process and network visibility on Windows. It hosts a Blazor server UI inside a WebView2 control and surfaces process trees, per‑process details, and live connection telemetry.
+SysWatch is a WinUI 3 desktop dashboard for real-time process and network visibility on Windows. It hosts a Blazor server UI inside a WebView2 control and surfaces process trees, per-process details, and live connection telemetry.
 
 ## Features
 - Process overview with parent/child tree layout
-- Expandable per‑process detail blocks (witr‑style output)
-- Real‑time network connections page with live charts
-- Filters, search, and row‑count controls
-- High‑contrast dashboard theme optimized for readability
+- Expandable per-process detail blocks (witr-style layout)
+- Real-time network connections page with live charts
+- Filters, search, and row-count controls
+- High-contrast dashboard theme optimized for readability
 
 ## Build Requirements (Windows)
 These are required to compile the project:
@@ -41,7 +41,9 @@ If MSBuild is installed, the scripts will use it automatically. WinUI 3 builds r
 
 ## Notes
 - The Network page uses `netstat -ano` to enumerate connections. Some processes may require elevated privileges to resolve fully.
+- The process detail layout is inspired by witr. SysWatch does not bundle witr; if you want the CLI tool, install it from https://github.com/pranshuparmar/witr (Apache-2.0).
 - If the UI fails to render styles after a rebuild, fully close/reopen the app to refresh the WebView cache.
 
 ## License
 MIT License (see `LICENSE`).
+
