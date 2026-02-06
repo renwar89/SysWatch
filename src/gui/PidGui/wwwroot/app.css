@@ -1,0 +1,242 @@
+/*
+    This CSS file matches the color scheme from MudBlazor to Bootstrap when utilized for authentication.
+    The file remains available at all times for demonstration purposes,
+    but it is exclusively employed in the 'App.razor' component when authentication is enabled.
+*/
+
+:root {
+    --pid-surface: #ffffff;
+    --pid-surface-alt: #f8fafc;
+    --pid-border: rgba(15, 23, 42, 0.08);
+    --pid-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    --pid-radius: 16px;
+}
+
+body {
+    font-family: 'Sora', 'Segoe UI', sans-serif;
+    background: #f5f7fb;
+    color: #0f172a;
+}
+
+.btn-primary {
+    text-transform: uppercase;
+    --bs-btn-bg: var(--mud-palette-primary) !important;
+    --bs-btn-hover-bg: var(--mud-palette-primary-darken) !important;
+}
+
+.nav-pills {
+    --bs-nav-pills-link-active-bg: var(--mud-palette-primary) !important;
+}
+
+.nav {
+    --bs-nav-link-color: var(--mud-palette-primary) !important;
+    --bs-nav-link-hover-color: var(--mud-palette-primary-darken) !important;
+}
+
+.pid-shell {
+    min-height: 100vh;
+    background: transparent;
+}
+
+.pid-main {
+    padding-bottom: 56px;
+}
+
+.pid-container {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 24px 24px 56px 24px;
+}
+
+.pid-page {
+    gap: 24px;
+}
+
+.pid-hero {
+    padding: 24px 28px;
+    border-radius: var(--pid-radius);
+    border: 1px solid var(--pid-border);
+    background: var(--pid-surface);
+    box-shadow: var(--pid-shadow);
+}
+
+.pid-hero-row {
+    flex-wrap: wrap;
+    row-gap: 12px;
+}
+
+.pid-hero-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pid-title {
+    font-weight: 700;
+}
+
+.pid-avatar {
+    background: rgba(37, 99, 235, 0.15);
+    color: #2563eb;
+}
+
+.pid-kpi-grid {
+    row-gap: 16px;
+}
+
+.pid-kpi-card {
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid var(--pid-border);
+    background: var(--pid-surface);
+}
+
+.pid-kpi-icon {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+}
+
+.pid-panel {
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid var(--pid-border);
+    background: var(--pid-surface);
+}
+
+.pid-panel-header {
+    margin-bottom: 12px;
+}
+
+.pid-chart {
+    margin-top: 8px;
+}
+
+.pid-toolbar {
+    padding: 18px 20px;
+    border-radius: 16px;
+    border: 1px solid var(--pid-border);
+    background: var(--pid-surface);
+}
+
+.pid-toolbar-grid {
+    column-gap: 16px;
+    row-gap: 12px;
+}
+
+.pid-filter {
+    width: 100%;
+}
+
+.pid-select {
+    width: 100%;
+}
+
+.pid-refresh {
+    width: 100%;
+}
+
+.pid-progress-top {
+    border-radius: 999px;
+}
+
+.pid-table-card {
+    border-radius: var(--pid-radius);
+    border: 1px solid var(--pid-border);
+    background: var(--pid-surface);
+    overflow: hidden;
+}
+
+.pid-table-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--pid-border);
+    background: var(--pid-surface);
+}
+
+.pid-table-empty {
+    padding: 24px 20px 28px 20px;
+}
+
+.pid-table {
+    background: transparent;
+}
+
+.pid-table .mud-table-container {
+    border-radius: 0 0 var(--pid-radius) var(--pid-radius);
+}
+
+.pid-table .mud-table-head {
+    background: var(--pid-surface-alt);
+}
+
+.pid-table .mud-table-row {
+    transition: background 0.15s ease;
+}
+
+.pid-table .mud-table-row:hover {
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.pid-row-selected > td {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.pid-table-avatar {
+    background: rgba(148, 163, 184, 0.22);
+    color: #334155;
+}
+
+.pid-detail-card {
+    padding: 20px;
+    border-radius: var(--pid-radius);
+    border: 1px solid var(--pid-border);
+    background: var(--pid-surface);
+    position: sticky;
+    top: 110px;
+}
+
+.pid-detail-grid {
+    row-gap: 12px;
+}
+
+.pid-detail-empty {
+    align-items: center;
+    text-align: center;
+    padding: 24px 0;
+}
+
+.pid-detail-avatar {
+    background: rgba(14, 116, 144, 0.15);
+    color: #0f766e;
+}
+
+.pid-secondary,
+.pid-muted {
+    color: var(--mud-palette-text-secondary);
+}
+
+.pid-mono {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    word-break: break-all;
+}
+
+.pid-drawer {
+    border-right: 1px solid var(--pid-border);
+}
+
+.pid-appbar {
+    border-bottom: 1px solid var(--pid-border);
+    background: var(--mud-palette-surface);
+}
+
+@media (max-width: 900px) {
+    .pid-container {
+        padding: 20px 16px 48px 16px;
+    }
+
+    .pid-hero {
+        padding: 20px;
+    }
+
+    .pid-detail-card {
+        position: static;
+    }
+}

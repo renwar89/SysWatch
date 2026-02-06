@@ -1,0 +1,579 @@
+@page "/network"
+@implements IDisposable
+@inject NetworkScannerService NetworkScanner
+
+<PageTitle>Network Connections</PageTitle>
+
+@{
+    var filtered = FilteredConnections().ToList();
+    var display = _pageSize <= 0 ? filtered : filtered.Take(_pageSize).ToList();
+    var topProcesses = GetTopProcesses(filtered);
+    var total = _connections.Count;
+    var established = _connections.Count(c => string.Equals(c.State, "ESTABLISHED", StringComparison.OrdinalIgnoreCase));
+    var listening = _connections.Count(c => string.Equals(c.State, "LISTENING", StringComparison.OrdinalIgnoreCase));
+    var uniqueRemotes = _connections.Select(c => c.RemoteAddress)
+        .Where(addr => !string.IsNullOrWhiteSpace(addr) && addr != "*" && addr != "0.0.0.0" && addr != "::")
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Count();
+}
+
+<div class="page">
+    <div class="page-wrapper">
+        <div class="page-header d-print-none">
+            <div class="container-xl">
+                <div class="row g-2 align-items-center">
+                    <div class="col">
+                        <div class="page-pretitle">Realtime</div>
+                        <h2 class="page-title">Network Connections</h2>
+                        <div class="page-subtitle">
+                            <span class="badge badge-outline-primary">@total total</span>
+                            <span class="text-muted">Auto refresh @(_autoRefresh ? $"{_refreshMs}ms" : "off")</span>
+                            @if (_lastUpdated is not null)
+                            {
+                                <span class="text-muted">Updated @_lastUpdated.Value.ToLocalTime().ToString("HH:mm:ss")</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-auto ms-auto">
+                        <div class="btn-list">
+                            <button class="btn btn-primary" @onclick="RefreshAsync" disabled="@_isLoading">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                    <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"></path>
+                                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"></path>
+                                </svg>
+                                Refresh
+                            </button>
+                            <button class="btn" @onclick="ToggleAutoRefresh">
+                                @if (_autoRefresh)
+                                {
+                                    <span>Pause Auto-Refresh</span>
+                                }
+                                else
+                                {
+                                    <span>Start Auto-Refresh</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page-body">
+            <div class="container-xl">
+                <div class="row row-deck row-cards">
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Total Connections</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge badge-primary">@total</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@total</div>
+                                <div class="stat-meta">Across all processes</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-primary" style="width: 100%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Established</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge badge-success">@established</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@established</div>
+                                <div class="stat-meta">Active sessions</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-success" style="width: @ToPercent(established, total)%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Listening</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge badge-warning">@listening</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@listening</div>
+                                <div class="stat-meta">Open ports</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-warning" style="width: @ToPercent(listening, total)%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Unique Remotes</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge badge-secondary">@uniqueRemotes</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@uniqueRemotes</div>
+                                <div class="stat-meta">Remote endpoints</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-secondary" style="width: 70%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Realtime Connection Flow</h3>
+                                <div class="card-actions">
+                                    <span class="badge badge-outline-primary">Last @_samples.Count samples</span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <svg class="sparkline sparkline-wide" viewBox="0 0 100 60" preserveAspectRatio="none">
+                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Total))" class="sparkline-line sparkline-total" />
+                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Established))" class="sparkline-line sparkline-established" />
+                                    <polyline points="@BuildPolyline(_samples.Select(s => s.Listening))" class="sparkline-line sparkline-listening" />
+                                </svg>
+                                <div class="legend">
+                                    <span><i class="legend-dot legend-total"></i>Total</span>
+                                    <span><i class="legend-dot legend-established"></i>Established</span>
+                                    <span><i class="legend-dot legend-listening"></i>Listening</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Top Processes</h3>
+                            </div>
+                            <div class="card-body">
+                                @if (topProcesses.Count == 0)
+                                {
+                                    <div class="empty">
+                                        <div class="empty-icon">o</div>
+                                        <div class="empty-title">No data yet</div>
+                                        <div class="empty-subtitle">Refresh to capture connections.</div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    @for (var i = 0; i < topProcesses.Count; i++)
+                                    {
+                                        var item = topProcesses[i];
+                                        var rank = i + 1;
+                                        <div class="metric-row metric-row-card">
+                                            <div class="metric-rank">#@rank</div>
+                                            <div class="metric-label text-truncate">@item.Name</div>
+                                            <div class="metric-bar">
+                                                <div class="progress progress-sm">
+                                                    <div class="progress-bar bg-primary" style="width: @ToPercent(item.Count, topProcesses[0].Count)%"></div>
+                                                </div>
+                                            </div>
+                                            <div class="metric-value">@item.Count</div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Connection Filters</h3>
+                                <div class="card-actions">
+                                    <span class="badge badge-outline-primary">@filtered.Count shown</span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Search</label>
+                                            <input type="text" class="form-control" placeholder="Process, PID, remote IP..." @bind="_searchText" @bind:event="oninput" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">State</label>
+                                            <select class="form-select" @bind="_stateFilter">
+                                                <option value="all">All states</option>
+                                                <option value="established">Established</option>
+                                                <option value="listening">Listening</option>
+                                                <option value="udp">UDP</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Rows per page</label>
+                                            <select class="form-select" @bind="_pageSize">
+                                                <option value="100">100</option>
+                                                <option value="200">200</option>
+                                                <option value="500">500</option>
+                                                <option value="0">All</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Refresh cadence</label>
+                                        <select class="form-select" @bind="_refreshMs" @bind:after="OnRefreshIntervalChanged">
+                                            <option value="1000">1 sec</option>
+                                            <option value="2000">2 sec</option>
+                                            <option value="5000">5 sec</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Hide loopback</label>
+                                        <div class="btn-list">
+                                            <button class="btn @(_hideLoopback ? "btn-primary" : string.Empty)" @onclick="ToggleLoopback">
+                                                @(_hideLoopback ? "Loopback hidden" : "Hide loopback")
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">All Connections</h3>
+                                <div class="card-actions">
+                                    <span class="text-muted">@display.Count of @filtered.Count</span>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-vcenter card-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Process</th>
+                                            <th>Protocol</th>
+                                            <th>Local</th>
+                                            <th>Remote</th>
+                                            <th>State</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (display.Count == 0)
+                                        {
+                                            <tr>
+                                                <td colspan="5">
+                                                    <div class="empty">
+                                                        <div class="empty-icon">o</div>
+                                                        <div class="empty-title">No connections</div>
+                                                        <div class="empty-subtitle">Adjust filters or refresh to see data.</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var conn in display)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <span class="status-dot @StateDot(conn)"></span>
+                                                            <div class="flex-fill">
+                                                                <div class="font-weight-medium">@GetProcessLabel(conn)</div>
+                                                                <div class="text-muted small">PID @conn.Pid</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>@conn.Protocol</td>
+                                                    <td class="text-muted"><small>@FormatEndpoint(conn.LocalAddress, conn.LocalPort)</small></td>
+                                                    <td class="text-muted"><small>@FormatEndpoint(conn.RemoteAddress, conn.RemotePort)</small></td>
+                                                    <td><span class="badge badge-secondary">@GetStateLabel(conn)</span></td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            @if (_pageSize > 0 && filtered.Count > _pageSize)
+                            {
+                                <div class="card-footer">
+                                    <span class="text-muted">Showing @_pageSize of @filtered.Count connections</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed record NetworkSample(DateTime TimestampUtc, int Total, int Established, int Listening);
+
+    private readonly List<NetworkConnectionInfo> _connections = new();
+    private readonly List<NetworkSample> _samples = new();
+    private string _searchText = string.Empty;
+    private string _stateFilter = "all";
+    private bool _hideLoopback = true;
+    private bool _autoRefresh = true;
+    private int _refreshMs = 2000;
+    private int _pageSize = 200;
+    private bool _isLoading;
+    private DateTime? _lastUpdated;
+    private CancellationTokenSource? _refreshCts;
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        StartAutoRefresh();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (!await _refreshLock.WaitAsync(0))
+        {
+            return;
+        }
+
+        try
+        {
+            _isLoading = true;
+            var snapshot = await NetworkScanner.GetConnectionsAsync();
+            _connections.Clear();
+            _connections.AddRange(snapshot);
+            _lastUpdated = DateTime.UtcNow;
+            UpdateSamples();
+        }
+        finally
+        {
+            _isLoading = false;
+            _refreshLock.Release();
+        }
+    }
+
+    private void UpdateSamples()
+    {
+        var total = _connections.Count;
+        var established = _connections.Count(c => string.Equals(c.State, "ESTABLISHED", StringComparison.OrdinalIgnoreCase));
+        var listening = _connections.Count(c => string.Equals(c.State, "LISTENING", StringComparison.OrdinalIgnoreCase));
+        _samples.Add(new NetworkSample(DateTime.UtcNow, total, established, listening));
+        if (_samples.Count > 60)
+        {
+            _samples.RemoveRange(0, _samples.Count - 60);
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshCts = null;
+
+        if (!_autoRefresh)
+        {
+            return;
+        }
+
+        _refreshCts = new CancellationTokenSource();
+        var token = _refreshCts.Token;
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(_refreshMs));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await RefreshAsync();
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when auto-refresh is toggled off or component disposed.
+            }
+        }, token);
+    }
+
+    private void OnRefreshIntervalChanged()
+    {
+        StartAutoRefresh();
+    }
+
+    private void ToggleAutoRefresh()
+    {
+        _autoRefresh = !_autoRefresh;
+        StartAutoRefresh();
+    }
+
+    private void ToggleLoopback()
+    {
+        _hideLoopback = !_hideLoopback;
+    }
+
+    private IEnumerable<NetworkConnectionInfo> FilteredConnections()
+    {
+        var filtered = _connections.AsEnumerable();
+
+        if (_hideLoopback)
+        {
+            filtered = filtered.Where(c => !IsLoopback(c.RemoteAddress));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+        {
+            var token = _searchText.Trim();
+            filtered = filtered.Where(c =>
+                (c.ProcessName?.Contains(token, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                c.Pid.ToString().Contains(token, StringComparison.OrdinalIgnoreCase) ||
+                c.LocalAddress.Contains(token, StringComparison.OrdinalIgnoreCase) ||
+                c.RemoteAddress.Contains(token, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = _stateFilter switch
+        {
+            "established" => filtered.Where(c => string.Equals(c.State, "ESTABLISHED", StringComparison.OrdinalIgnoreCase)),
+            "listening" => filtered.Where(c => string.Equals(c.State, "LISTENING", StringComparison.OrdinalIgnoreCase)),
+            "udp" => filtered.Where(c => string.Equals(c.Protocol, "UDP", StringComparison.OrdinalIgnoreCase)),
+            _ => filtered
+        };
+
+        return filtered.OrderBy(c => c.ProcessName).ThenBy(c => c.Pid);
+    }
+
+    private static bool IsLoopback(string address)
+    {
+        return address == "127.0.0.1" || address == "::1" || address.StartsWith("127.", StringComparison.Ordinal);
+    }
+
+    private static string FormatEndpoint(string address, int port)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return "-";
+        }
+
+        if (port <= 0)
+        {
+            return address;
+        }
+
+        return address.Contains(":", StringComparison.Ordinal) && !address.Contains("]", StringComparison.Ordinal)
+            ? $"[{address}]:{port}"
+            : $"{address}:{port}";
+    }
+
+    private static string GetProcessLabel(NetworkConnectionInfo conn)
+    {
+        if (!string.IsNullOrWhiteSpace(conn.ProcessName))
+        {
+            return conn.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? conn.ProcessName
+                : conn.ProcessName + ".exe";
+        }
+
+        return "unknown.exe";
+    }
+
+    private static string GetStateLabel(NetworkConnectionInfo conn)
+    {
+        if (string.Equals(conn.Protocol, "UDP", StringComparison.OrdinalIgnoreCase))
+        {
+            return "UDP";
+        }
+
+        return string.IsNullOrWhiteSpace(conn.State) ? "-" : conn.State!;
+    }
+
+    private static string StateDot(NetworkConnectionInfo conn)
+    {
+        if (string.Equals(conn.State, "ESTABLISHED", StringComparison.OrdinalIgnoreCase))
+        {
+            return "status-dot-green";
+        }
+
+        if (string.Equals(conn.State, "LISTENING", StringComparison.OrdinalIgnoreCase))
+        {
+            return "status-dot-yellow";
+        }
+
+        return "status-dot-red";
+    }
+
+    private static IReadOnlyList<(string Name, int Count)> GetTopProcesses(IEnumerable<NetworkConnectionInfo> connections)
+    {
+        return connections
+            .GroupBy(c => string.IsNullOrWhiteSpace(c.ProcessName) ? "unknown" : c.ProcessName!)
+            .OrderByDescending(group => group.Count())
+            .Take(6)
+            .Select(group => (group.Key, group.Count()))
+            .ToList();
+    }
+
+    private static string BuildPolyline(IEnumerable<int> values)
+    {
+        var list = values.ToList();
+        if (list.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var max = Math.Max(1, list.Max());
+        var width = 100.0;
+        var height = 40.0;
+        var step = list.Count == 1 ? 0 : width / (list.Count - 1);
+
+        return string.Join(" ", list.Select((value, index) =>
+        {
+            var x = step * index;
+            var y = height - (value / (double)max * height);
+            return $"{x:0.#},{y:0.#}";
+        }));
+    }
+
+    private static double ToPercent(int value, int total)
+    {
+        if (total <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Min(100, Math.Max(0, value * 100.0 / total));
+    }
+
+    public void Dispose()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshLock.Dispose();
+    }
+}

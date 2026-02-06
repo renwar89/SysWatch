@@ -1,0 +1,77 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "PID: Clean GUI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        "scripts\\clean.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Build GUI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        "scripts\\build.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Run GUI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        "scripts\\run.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Clean Build Run GUI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        "scripts\\clean-build-run.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Nuke GUI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        "scripts\\nuke.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Build Diag",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        "scripts\\build-diag.ps1"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

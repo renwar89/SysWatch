@@ -1,0 +1,8 @@
+{
+  "GuiProjectPath": "src/gui/PidGui/PidGui.csproj",
+  "GuiConfiguration": "Debug",
+  "GuiPlatform": "x64",
+  "GuiRuntime": "win-x64",
+  "GuiSelfContained": true,
+  "GuiExePath": ""
+}

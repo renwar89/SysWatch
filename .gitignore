@@ -1,0 +1,46 @@
+# Build outputs
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/.ropeproject/
+.vscode/*.db
+.vscode/*.log
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# MSBuild / NuGet
+*.nupkg
+*.snupkg
+packages/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Logs & diagnostics
+*.log
+logs/
+Diagnostics/
+
+# OS / tooling
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Local app data (WinUI / WebView2)
+**/PidGui.exe.WebView2/
+**/WebView2/
+
+# Local workspaces / caches
+Documents/
+planning/
+snapshots/
+data/

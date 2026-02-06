@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "PidGui": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:12411;http://localhost:12412"
+    }
+  }
+}

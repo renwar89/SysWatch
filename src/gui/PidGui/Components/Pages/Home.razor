@@ -1,0 +1,757 @@
+@page "/"
+@implements IDisposable
+@inject ProcessScannerService Scanner
+
+<PageTitle>PID Dashboard</PageTitle>
+
+@{
+    var filtered = FilteredProcesses().ToList();
+    var tree = BuildProcessTree(filtered);
+    var display = _pageSize <= 0 ? tree : tree.Take(_pageSize).ToList();
+}
+
+<div class="page">
+    <div class="page-wrapper">
+        <div class="page-header d-print-none">
+            <div class="container-xl">
+                <div class="row g-2 align-items-center">
+                    <div class="col">
+                        <div class="page-pretitle">Overview</div>
+                        <h2 class="page-title">Process Monitor Dashboard</h2>
+                        <div class="page-subtitle">
+                            <span class="badge badge-outline-primary">@_processes.Count total</span>
+                            <span class="text-muted">Auto refresh @(_autoRefresh ? $"{_refreshMs}ms" : "off")</span>
+                            @if (_lastUpdated is not null)
+                            {
+                                <span class="text-muted">Updated @_lastUpdated.Value.ToLocalTime().ToString("HH:mm:ss")</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-auto ms-auto">
+                        <div class="btn-list">
+                            <button class="btn btn-primary" @onclick="RefreshAsync" disabled="@_isLoading">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                    <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"></path>
+                                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"></path>
+                                </svg>
+                                Refresh
+                            </button>
+                            <button class="btn" @onclick="ToggleAutoRefresh">
+                                @if (_autoRefresh)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                        <rect x="6" y="5" width="4" height="14" rx="1"></rect>
+                                        <rect x="14" y="5" width="4" height="14" rx="1"></rect>
+                                    </svg>
+                                    <span>Pause Auto-Refresh</span>
+                                }
+                                else
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                        <path d="M7 4v16l13 -8z"></path>
+                                    </svg>
+                                    <span>Start Auto-Refresh</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page-body">
+            <div class="container-xl">
+                <div class="row row-deck row-cards">
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Total Processes</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge badge-primary">@_processes.Count</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@_processes.Count</div>
+                                <div class="stat-meta">Active monitoring</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-primary" style="width: 100%" role="progressbar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Avg CPU Usage</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge @GetCpuBadgeClass()">@GetAverageCpu().ToString("F1")%</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@GetAverageCpu().ToString("F1")%</div>
+                                <div class="stat-meta">System load</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar @GetCpuProgressClass()" style="width: @ClampPercent(GetAverageCpu())%" role="progressbar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Total Memory</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge badge-secondary">@FormatBytes(GetTotalMemory())</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@FormatBytes(GetTotalMemory())</div>
+                                <div class="stat-meta">Working set</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-secondary" style="width: 70%" role="progressbar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="subheader">Total Threads</div>
+                                    <div class="ms-auto lh-1">
+                                        <span class="badge badge-success">@GetTotalThreads()</span>
+                                    </div>
+                                </div>
+                                <div class="stat-value">@GetTotalThreads()</div>
+                                <div class="stat-meta">Across all processes</div>
+                                <div class="progress progress-sm">
+                                    <div class="progress-bar bg-success" style="width: 60%" role="progressbar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4" id="filters">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Process Filters</h3>
+                                <div class="card-actions">
+                                    <span class="badge badge-outline-primary">@filtered.Count shown</span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Search</label>
+                                            <input type="text" class="form-control" placeholder="Filter by name, PID, or path..." @bind="_searchText" @bind:event="oninput" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Sort by</label>
+                                            <select class="form-select" @bind="_sortBy">
+                                                <option value="tree">Parent Tree</option>
+                                                <option value="cpu">CPU Usage</option>
+                                                <option value="memory">Memory</option>
+                                                <option value="name">Name</option>
+                                                <option value="pid">Process ID</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Quick filters</label>
+                                            <div class="btn-list">
+                                                <button class="btn @(_showHighCpu ? "btn-primary" : string.Empty)" @onclick="ToggleHighCpu">High CPU</button>
+                                                <button class="btn @(_showHighMemory ? "btn-primary" : string.Empty)" @onclick="ToggleHighMemory">High Memory</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Refresh cadence</label>
+                                        <select class="form-select" @bind="_refreshMs" @bind:after="OnRefreshIntervalChanged">
+                                            <option value="500">500 ms</option>
+                                            <option value="1000">1 sec</option>
+                                            <option value="2000">2 sec</option>
+                                            <option value="5000">5 sec</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Rows per page</label>
+                                        <select class="form-select" @bind="_pageSize">
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                            <option value="200">200</option>
+                                            <option value="0">All</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4" id="processes">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Active Processes</h3>
+                                <div class="card-actions">
+                                    <span class="text-muted">@display.Count of @_processes.Count total</span>
+                                </div>
+                            </div>
+                            @if (_isLoading)
+                            {
+                                <div class="card-progress">
+                                    <div class="progress progress-sm">
+                                        <div class="progress-bar bg-primary" style="width: 100%"></div>
+                                    </div>
+                                </div>
+                            }
+                            <div class="table-responsive">
+                                <table class="table table-vcenter card-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Process</th>
+                                            <th>CPU</th>
+                                            <th>Memory</th>
+                                            <th>Threads</th>
+                                            <th>Started</th>
+                                            <th>Path</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (filtered.Count == 0)
+                                        {
+                                            <tr>
+                                                <td colspan="7">
+                                                    <div class="empty">
+                                                        <div class="empty-icon">o</div>
+                                                        <div class="empty-title">No matching processes</div>
+                                                        <div class="empty-subtitle">Try clearing filters or widening your search.</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var node in display)
+                                            {
+                                                var proc = node.Process;
+                                                <tr class="@(_expanded.Contains(proc.Id) ? "row-expanded" : string.Empty)">
+                                                    <td>
+                                                        <div class="d-flex align-items-center tree-indent" style="--depth: @node.Depth; --tree-line-opacity: @(node.Depth == 0 ? 0 : 1)">
+                                                            <span class="status-dot @GetStatusDotClass(proc)"></span>
+                                                            <div class="flex-fill">
+                                                                <div class="font-weight-medium">@proc.Name</div>
+                                                                <div class="text-muted small">PID @proc.Id - @(proc.User ?? "unknown")</div>
+                                                                @if (!string.IsNullOrWhiteSpace(proc.ServiceName))
+                                                                {
+                                                                    <div class="service-chip">Service: @proc.ServiceName</div>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <div class="flex-fill">
+                                                                <div class="progress progress-sm">
+                                                                    <div class="progress-bar @GetCpuProgressClass(proc.CpuPercent)"
+                                                                         style="width: @ClampPercent(proc.CpuPercent)%"
+                                                                         role="progressbar"></div>
+                                                                </div>
+                                                            </div>
+                                                            <span class="ms-2">@proc.CpuPercent.ToString("F1")%</span>
+                                                        </div>
+                                                    </td>
+                                                    <td>@FormatBytes(proc.WorkingSetBytes)</td>
+                                                    <td><span class="badge badge-secondary">@proc.ThreadCount</span></td>
+                                                    <td>@FormatRelative(proc.StartTimeUtc)</td>
+                                                    <td class="text-muted"><small>@TruncatePath(proc.Path)</small></td>
+                                                    <td>
+                                                        <button class="btn btn-sm btn-icon" title="Toggle details" @onclick="() => ToggleExpanded(proc)">
+                                                            @if (_expanded.Contains(proc.Id))
+                                                            {
+                                                                <span>-</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span>+</span>
+                                                            }
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                @if (_expanded.Contains(proc.Id))
+                                                {
+                                                    <tr class="detail-row">
+                                                        <td colspan="7">
+                                                            <div class="detail-block">
+                                                                <div class="detail-title">witr --pid @proc.Id</div>
+                                                                <div class="detail-grid">
+                                                                    <div class="detail-line"><span class="detail-label">Target</span><span>@GetExeName(proc)</span></div>
+                                                                    <div class="detail-line"><span class="detail-label">Process</span><span>@GetExeName(proc) (pid @proc.Id)</span></div>
+                                                                    <div class="detail-line"><span class="detail-label">User</span><span>@(proc.User ?? "unknown")</span></div>
+                                                                    <div class="detail-line"><span class="detail-label">Service</span><span>@(proc.ServiceName ?? "none")</span></div>
+                                                                    <div class="detail-line detail-wide"><span class="detail-label">Command</span><span>@(proc.CommandLine ?? GetExeName(proc))</span></div>
+                                                                    <div class="detail-line"><span class="detail-label">Started</span><span>@FormatStartDetailed(proc.StartTimeUtc)</span></div>
+                                                                    <div class="detail-line detail-wide">
+                                                                        <span class="detail-label">Why It Exists</span>
+                                                                        <span>@(proc.ParentChain ?? "unknown")</span>
+                                                                    </div>
+                                                                    <div class="detail-line"><span class="detail-label">Source</span><span>@(proc.Source ?? "unknown")</span></div>
+                                                                </div>
+                                                                @if (ServiceNameMismatch(proc))
+                                                                {
+                                                                    <div class="detail-warnings">
+                                                                        <div class="detail-label">Warnings</div>
+                                                                        <ul>
+                                                                            <li>Service name and process name do not match</li>
+                                                                        </ul>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            @if (_pageSize > 0 && filtered.Count > _pageSize)
+                            {
+                                <div class="card-footer">
+                                    <span class="text-muted">Showing @_pageSize of @filtered.Count processes</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly List<ProcessInfo> _processes = new();
+    private string _searchText = string.Empty;
+    private string _sortBy = "tree";
+    private bool _showHighCpu;
+    private bool _showHighMemory;
+    private bool _autoRefresh = true;
+    private int _refreshMs = 2000;
+    private int _pageSize = 100;
+    private bool _isLoading;
+    private DateTime? _lastUpdated;
+    private CancellationTokenSource? _refreshCts;
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private readonly HashSet<int> _expanded = new();
+
+    private sealed record ProcessNode(ProcessInfo Process, int Depth);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        StartAutoRefresh();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (!await _refreshLock.WaitAsync(0))
+        {
+            return;
+        }
+
+        try
+        {
+            _isLoading = true;
+            var snapshot = await Scanner.GetSnapshotAsync();
+            _processes.Clear();
+            _processes.AddRange(snapshot);
+            _lastUpdated = DateTime.UtcNow;
+            var alive = _processes.Select(p => p.Id).ToHashSet();
+            _expanded.RemoveWhere(id => !alive.Contains(id));
+        }
+        finally
+        {
+            _isLoading = false;
+            _refreshLock.Release();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshCts = null;
+
+        if (!_autoRefresh)
+        {
+            return;
+        }
+
+        _refreshCts = new CancellationTokenSource();
+        var token = _refreshCts.Token;
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(_refreshMs));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await RefreshAsync();
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when auto-refresh is toggled off or component disposed.
+            }
+        }, token);
+    }
+
+    private void OnRefreshIntervalChanged()
+    {
+        StartAutoRefresh();
+    }
+
+    private void ToggleAutoRefresh()
+    {
+        _autoRefresh = !_autoRefresh;
+        StartAutoRefresh();
+    }
+
+    private void ToggleHighCpu()
+    {
+        _showHighCpu = !_showHighCpu;
+    }
+
+    private void ToggleHighMemory()
+    {
+        _showHighMemory = !_showHighMemory;
+    }
+
+    private IEnumerable<ProcessInfo> FilteredProcesses()
+    {
+        var filtered = _processes.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+        {
+            var token = _searchText.Trim();
+            if (int.TryParse(token, out var pid))
+            {
+                filtered = filtered.Where(p => p.Id == pid);
+            }
+            else
+            {
+                filtered = filtered.Where(p =>
+                    p.Name.Contains(token, StringComparison.OrdinalIgnoreCase) ||
+                    (p.WindowTitle?.Contains(token, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (p.Path?.Contains(token, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (p.User?.Contains(token, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (p.CommandLine?.Contains(token, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+        }
+
+        if (_showHighCpu)
+        {
+            filtered = filtered.Where(p => p.CpuPercent >= 5.0);
+        }
+
+        if (_showHighMemory)
+        {
+            filtered = filtered.Where(p => p.WorkingSetBytes >= 100 * 1024 * 1024);
+        }
+
+        filtered = _sortBy switch
+        {
+            "tree" => filtered.OrderBy(p => p.ParentId ?? 0).ThenBy(p => p.Id),
+            "memory" => filtered.OrderByDescending(p => p.WorkingSetBytes),
+            "pid" => filtered.OrderBy(p => p.Id),
+            "name" => filtered.OrderBy(p => p.Name),
+            _ => filtered.OrderByDescending(p => p.CpuPercent)
+        };
+
+        return filtered;
+    }
+
+    private static List<ProcessNode> BuildProcessTree(IReadOnlyList<ProcessInfo> ordered)
+    {
+        var result = new List<ProcessNode>();
+        if (ordered.Count == 0)
+        {
+            return result;
+        }
+
+        var index = ordered.Select((proc, idx) => (proc.Id, idx))
+            .ToDictionary(item => item.Id, item => item.idx);
+
+        var byId = ordered.ToDictionary(proc => proc.Id);
+        var children = new Dictionary<int, List<ProcessInfo>>();
+        var roots = new List<ProcessInfo>();
+
+        foreach (var proc in ordered)
+        {
+            if (proc.ParentId is int parentId && byId.ContainsKey(parentId))
+            {
+                if (!children.TryGetValue(parentId, out var list))
+                {
+                    list = new List<ProcessInfo>();
+                    children[parentId] = list;
+                }
+
+                list.Add(proc);
+            }
+            else
+            {
+                roots.Add(proc);
+            }
+        }
+
+        roots.Sort((a, b) => index[a.Id].CompareTo(index[b.Id]));
+        foreach (var list in children.Values)
+        {
+            list.Sort((a, b) => index[a.Id].CompareTo(index[b.Id]));
+        }
+
+        void Walk(ProcessInfo proc, int depth)
+        {
+            result.Add(new ProcessNode(proc, depth));
+            if (children.TryGetValue(proc.Id, out var list))
+            {
+                foreach (var child in list)
+                {
+                    Walk(child, depth + 1);
+                }
+            }
+        }
+
+        foreach (var root in roots)
+        {
+            Walk(root, 0);
+        }
+
+        return result;
+    }
+
+    private double GetAverageCpu()
+    {
+        if (_processes.Count == 0)
+        {
+            return 0;
+        }
+
+        return _processes.Average(p => p.CpuPercent);
+    }
+
+    private long GetTotalMemory()
+    {
+        return _processes.Sum(p => p.WorkingSetBytes);
+    }
+
+    private int GetTotalThreads()
+    {
+        return _processes.Sum(p => p.ThreadCount);
+    }
+
+    private static double ClampPercent(double value)
+    {
+        if (value < 0)
+        {
+            return 0;
+        }
+
+        return value > 100 ? 100 : value;
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return "0 B";
+        }
+
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        var order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len /= 1024;
+        }
+
+        return $"{len:0.#} {sizes[order]}";
+    }
+
+    private static string TruncatePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "N/A";
+        }
+
+        if (path.Length <= 48)
+        {
+            return path;
+        }
+
+        return "..." + path.Substring(path.Length - 45);
+    }
+
+    private static string FormatRelative(DateTime? startTimeUtc)
+    {
+        if (startTimeUtc is null)
+        {
+            return "unknown";
+        }
+
+        var elapsed = DateTime.UtcNow - startTimeUtc.Value;
+        if (elapsed < TimeSpan.Zero)
+        {
+            return "just now";
+        }
+
+        return FormatDuration(elapsed) + " ago";
+    }
+
+    private static string FormatStartDetailed(DateTime? startTimeUtc)
+    {
+        if (startTimeUtc is null)
+        {
+            return "unknown";
+        }
+
+        var local = startTimeUtc.Value.ToLocalTime();
+        var elapsed = DateTime.UtcNow - startTimeUtc.Value;
+        var ago = elapsed < TimeSpan.Zero ? "just now" : FormatDuration(elapsed) + " ago";
+        return $"{ago} ({local:ddd yyyy-MM-dd HH:mm:ss zzz})";
+    }
+
+    private static string FormatDuration(TimeSpan span)
+    {
+        if (span.TotalDays >= 1)
+        {
+            return $"{(int)span.TotalDays}d {span.Hours}h";
+        }
+
+        if (span.TotalHours >= 1)
+        {
+            return $"{(int)span.TotalHours}h {span.Minutes}m";
+        }
+
+        if (span.TotalMinutes >= 1)
+        {
+            return $"{(int)span.TotalMinutes}m {span.Seconds}s";
+        }
+
+        return $"{span.Seconds}s";
+    }
+
+    private string GetCpuBadgeClass()
+    {
+        var avg = GetAverageCpu();
+        if (avg > 70)
+        {
+            return "badge-danger";
+        }
+
+        if (avg > 40)
+        {
+            return "badge-warning";
+        }
+
+        return "badge-success";
+    }
+
+    private string GetCpuProgressClass(double cpu = -1)
+    {
+        var value = cpu >= 0 ? cpu : GetAverageCpu();
+        if (value > 70)
+        {
+            return "bg-danger";
+        }
+
+        if (value > 40)
+        {
+            return "bg-warning";
+        }
+
+        return "bg-success";
+    }
+
+    private static string GetStatusDotClass(ProcessInfo proc)
+    {
+        if (proc.CpuPercent > 50)
+        {
+            return "status-dot-red";
+        }
+
+        if (proc.CpuPercent > 20)
+        {
+            return "status-dot-yellow";
+        }
+
+        return "status-dot-green";
+    }
+
+    private static string GetExeName(ProcessInfo proc)
+    {
+        if (string.IsNullOrWhiteSpace(proc.Name))
+        {
+            return "unknown.exe";
+        }
+
+        if (proc.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return proc.Name;
+        }
+
+        return proc.Name + ".exe";
+    }
+
+    private static bool ServiceNameMismatch(ProcessInfo proc)
+    {
+        if (string.IsNullOrWhiteSpace(proc.ServiceName) || string.IsNullOrWhiteSpace(proc.Name))
+        {
+            return false;
+        }
+
+        var processName = proc.Name;
+        if (processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            processName = processName[..^4];
+        }
+
+        return !proc.ServiceName.Contains(processName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ToggleExpanded(ProcessInfo proc)
+    {
+        if (!_expanded.Add(proc.Id))
+        {
+            _expanded.Remove(proc.Id);
+        }
+    }
+
+    public void Dispose()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshLock.Dispose();
+    }
+}
